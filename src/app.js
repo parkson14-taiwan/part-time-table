@@ -749,12 +749,27 @@ function renderPayroll() {
     return;
   }
 
+  const storedFilter = JSON.parse(sessionStorage.getItem("ptt-payroll-filter") || "{}");
+  const payrollFilter = {
+    start: storedFilter.start || "",
+    end: storedFilter.end || "",
+  };
+  const filterStart = payrollFilter.start ? new Date(`${payrollFilter.start}T00:00:00`) : null;
+  const filterEnd = payrollFilter.end ? new Date(`${payrollFilter.end}T23:59:59.999`) : null;
+  const approvedEntries = data.timeEntries.filter((entry) => entry.status === "Approved");
+  const filteredEntries = approvedEntries.filter((entry) => {
+    if (!filterStart && !filterEnd) return true;
+    if (!entry.start) return false;
+    const entryDate = new Date(entry.start);
+    if (filterStart && entryDate < filterStart) return false;
+    if (filterEnd && entryDate > filterEnd) return false;
+    return true;
+  });
+
   const summaryByUser = data.users
     .filter((userItem) => userItem.role !== "admin")
     .map((userItem) => {
-      const entries = data.timeEntries.filter(
-        (entry) => entry.userId === userItem.id && entry.status === "Approved"
-      );
+      const entries = filteredEntries.filter((entry) => entry.userId === userItem.id);
       const totalHours = entries.reduce(
         (total, entry) => total + diffHours(entry.start, entry.end, entry.breakMinutes),
         0
@@ -767,8 +782,7 @@ function renderPayroll() {
     });
 
   const summaryByEvent = Array.from(
-    data.timeEntries
-      .filter((entry) => entry.status === "Approved")
+    filteredEntries
       .reduce((map, entry) => {
         const eventInfo = getEntryEventInfo(entry, data.events);
         const key = `${eventInfo.refNo}-${eventInfo.name}`;
@@ -794,6 +808,20 @@ function renderPayroll() {
   render(`
     <section class="card">
       <h2>Payroll 匯出 / Payroll export</h2>
+      <form id="payroll-filter" class="grid three" style="margin-bottom:12px;">
+        <label class="field">
+          開始日 / Start date
+          <input type="date" name="start" value="${payrollFilter.start}" />
+        </label>
+        <label class="field">
+          結束日 / End date
+          <input type="date" name="end" value="${payrollFilter.end}" />
+        </label>
+        <div class="actions" style="align-items:flex-end;">
+          <button type="submit">套用 / Apply</button>
+          <button type="button" id="clear-payroll-filter" class="secondary">清除 / Clear</button>
+        </div>
+      </form>
       <div class="actions">
         <button id="export-user">依人員匯出 CSV / Export by user</button>
         <button id="export-event" class="secondary">依活動匯出 CSV / Export by event</button>
@@ -915,6 +943,22 @@ function renderPayroll() {
       ...summaryByEvent.map((row) => [row.name, row.refNo, row.totalHours, row.totalCrew]),
     ];
     downloadCsv(rows, "payroll_by_event.csv");
+  });
+
+  document.querySelector("#payroll-filter").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = event.target;
+    const payload = Object.fromEntries(new FormData(form));
+    sessionStorage.setItem(
+      "ptt-payroll-filter",
+      JSON.stringify({ start: payload.start || "", end: payload.end || "" })
+    );
+    router();
+  });
+
+  document.querySelector("#clear-payroll-filter").addEventListener("click", () => {
+    sessionStorage.removeItem("ptt-payroll-filter");
+    router();
   });
 
   document.querySelector("#lock-form").addEventListener("submit", async (event) => {
