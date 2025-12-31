@@ -769,6 +769,7 @@ function renderPayroll() {
     if (filterEnd && entryDate > filterEnd) return false;
     return true;
   });
+  const userNameById = new Map(data.users.map((userItem) => [userItem.id, userItem.name]));
 
   const summaryByUser = data.users
     .filter((userItem) => userItem.role !== "admin")
@@ -797,17 +798,23 @@ function renderPayroll() {
             date: eventInfo.date,
             totalHours: 0,
             totalCrew: 0,
+            approvedBy: new Set(),
           });
         }
         const record = map.get(key);
         record.totalHours += diffHours(entry.start, entry.end, entry.breakMinutes);
         record.totalCrew += 1;
+        const approverName = entry.approvedBy ? userNameById.get(entry.approvedBy) : null;
+        if (approverName) {
+          record.approvedBy.add(approverName);
+        }
         return map;
       }, new Map())
       .values()
   ).map((record) => ({
     ...record,
     totalHours: record.totalHours.toFixed(2),
+    approvedBy: record.approvedBy.size ? Array.from(record.approvedBy).join("、") : "—",
   }));
 
   render(`
@@ -858,7 +865,7 @@ function renderPayroll() {
           <h3>依活動彙總 / Summary by event</h3>
           <table class="table">
             <thead>
-              <tr><th>活動 / Event</th><th>Ref No / 參考編號</th><th>日期 / Date</th><th>工時 / Hours</th><th>人數 / Crew</th></tr>
+              <tr><th>活動 / Event</th><th>Ref No / 參考編號</th><th>日期 / Date</th><th>工時 / Hours</th><th>人數 / Crew</th><th>核准人 / Approved by</th></tr>
             </thead>
             <tbody>
               ${
@@ -868,10 +875,10 @@ function renderPayroll() {
                         (row) =>
                           `<tr><td>${row.name}</td><td>${row.refNo}</td><td>${row.date}</td><td>${
                             row.totalHours
-                          }</td><td>${row.totalCrew}</td></tr>`
+                          }</td><td>${row.totalCrew}</td><td>${row.approvedBy}</td></tr>`
                       )
                       .join("")
-                  : `<tr><td colspan="5">尚無核准工時 / No approved entries</td></tr>`
+                  : `<tr><td colspan="6">尚無核准工時 / No approved entries</td></tr>`
               }
             </tbody>
           </table>
@@ -944,13 +951,21 @@ function renderPayroll() {
 
   document.querySelector("#export-event").addEventListener("click", () => {
     const rows = [
-      ["Event / 活動", "Ref No / 參考編號", "Date / 日期", "Total Hours / 總工時", "Total Crew / 人數"],
+      [
+        "Event / 活動",
+        "Ref No / 參考編號",
+        "Date / 日期",
+        "Total Hours / 總工時",
+        "Total Crew / 人數",
+        "Approved By / 核准人",
+      ],
       ...summaryByEvent.map((row) => [
         row.name,
         row.refNo,
         row.date,
         row.totalHours,
         row.totalCrew,
+        row.approvedBy,
       ]),
     ];
     downloadCsv(rows, "payroll_by_event.csv");
