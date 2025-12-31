@@ -16,6 +16,14 @@ const formatDateTime = (value) => {
   return date.toLocaleString("zh-TW", { hour12: false });
 };
 
+const formatDateTimeInput = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offset * 60000);
+  return localDate.toISOString().slice(0, 16);
+};
+
 const diffHours = (start, end, breakMinutes = 0) => {
   if (!start || !end) return 0;
   const startDate = new Date(start);
@@ -124,19 +132,11 @@ function renderLogin() {
   render(`
     <section class="card">
       <h2>登入</h2>
-      <p class="notice">此版本使用簡化登入：請輸入 Email 後選擇角色即可。</p>
+      <p class="notice">此版本使用簡化登入：新帳號預設為 Crew，需由管理者調整角色。</p>
       <form id="login-form" class="grid two">
         <label class="field">
           Email
           <input name="email" type="email" placeholder="name@example.com" required />
-        </label>
-        <label class="field">
-          角色
-          <select name="role">
-            <option value="crew">Crew</option>
-            <option value="lead">Lead Chef</option>
-            <option value="admin">Admin/Payroll</option>
-          </select>
         </label>
         <label class="field">
           名稱
@@ -153,19 +153,21 @@ function renderLogin() {
     event.preventDefault();
     const form = event.target;
     const payload = Object.fromEntries(new FormData(form));
-    const user = {
-      id: payload.email,
-      name: payload.name,
-      email: payload.email,
-      role: payload.role,
-    };
     await ensureData();
-    const existing = data.users.find((entry) => entry.id === user.id);
+    const existing = data.users.find((entry) => entry.id === payload.email);
     if (!existing) {
+      const user = {
+        id: payload.email,
+        name: payload.name,
+        email: payload.email,
+        role: "crew",
+      };
       data.users.push(user);
       await persist();
+      setSession(user);
+    } else {
+      setSession(existing);
     }
-    setSession(user);
     router();
   });
 }
@@ -225,6 +227,12 @@ function renderEventDetail() {
   const myEntries = data.timeEntries.filter(
     (entry) => entry.eventId === eventId && entry.userId === user.id
   );
+  const latestEntry = [...myEntries].sort(
+    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+  )[0];
+  const canSubmit =
+    !latestEntry || ["Request Edit", "Rejected"].includes(latestEntry.status);
+  const disabledAttr = canSubmit ? "" : "disabled";
   const entriesHtml = myEntries
     .map(
       (entry) => `
@@ -272,29 +280,38 @@ function renderEventDetail() {
     </section>
     <section class="card">
       <h2>填報 Timesheet</h2>
+      ${
+        canSubmit
+          ? ""
+          : `<p class="notice">目前狀態為「${latestEntry.status}」，需由 Lead Chef 或 Admin 要求更正後才能再次提交。</p>`
+      }
       <form id="timesheet-form" class="grid three">
         <label class="field">
           到場時間
-          <input type="datetime-local" name="start" required />
+          <input type="datetime-local" name="start" required ${disabledAttr} />
         </label>
         <label class="field">
           離場時間
-          <input type="datetime-local" name="end" required />
+          <input type="datetime-local" name="end" required ${disabledAttr} />
         </label>
         <label class="field">
           Break 分鐘
-          <input type="number" name="breakMinutes" value="0" min="0" />
+          <input type="number" name="breakMinutes" value="0" min="0" ${disabledAttr} />
         </label>
         <label class="field">
           備註
-          <textarea name="notes" placeholder="延時、等候、額外搬運"></textarea>
+          <textarea name="notes" placeholder="延時、等候、額外搬運" ${disabledAttr}></textarea>
         </label>
         <div class="actions" style="align-items: flex-end;">
-          <button type="submit">提交</button>
+          <button type="submit" ${disabledAttr}>提交</button>
         </div>
       </form>
     </section>
   `);
+
+  if (!canSubmit) {
+    return;
+  }
 
   document.querySelector("#timesheet-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -551,6 +568,110 @@ function renderAdmin() {
         </tbody>
       </table>
     </section>
+    <section class="card">
+      <h2>人員管理</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>姓名</th>
+            <th>Email</th>
+            <th>角色</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${
+            data.users.length
+              ? data.users
+                  .map(
+                    (userItem) => `
+                <tr>
+                  <td>${userItem.name}</td>
+                  <td>${userItem.email}</td>
+                  <td>
+                    <select data-role="${userItem.id}">
+                      <option value="crew" ${
+                        userItem.role === "crew" ? "selected" : ""
+                      }>Crew</option>
+                      <option value="lead" ${
+                        userItem.role === "lead" ? "selected" : ""
+                      }>Lead Chef</option>
+                      <option value="admin" ${
+                        userItem.role === "admin" ? "selected" : ""
+                      }>Admin/Payroll</option>
+                    </select>
+                  </td>
+                  <td><button class="secondary" data-user="${userItem.id}">更新</button></td>
+                </tr>
+              `
+                  )
+                  .join("")
+              : `<tr><td colspan="4">尚無成員</td></tr>`
+          }
+        </tbody>
+      </table>
+    </section>
+    <section class="card">
+      <h2>工時調整</h2>
+      ${
+        data.timeEntries.length
+          ? `
+            <form id="adjust-form" class="grid two">
+              <label class="field">
+                選擇工時
+                <select name="entryId" id="adjust-entry">
+                  ${data.timeEntries
+                    .map((entry) => {
+                      const entryUser = data.users.find(
+                        (userItem) => userItem.id === entry.userId
+                      );
+                      const entryEvent = data.events.find(
+                        (eventItem) => eventItem.id === entry.eventId
+                      );
+                      return `<option value="${entry.id}">${entryEvent?.code || "-"}｜${
+                        entryUser?.name || "-"
+                      }｜${formatDateTime(entry.start)}（${entry.status}）</option>`;
+                    })
+                    .join("")}
+                </select>
+              </label>
+              <label class="field">
+                到場時間
+                <input type="datetime-local" name="start" required />
+              </label>
+              <label class="field">
+                離場時間
+                <input type="datetime-local" name="end" required />
+              </label>
+              <label class="field">
+                Break 分鐘
+                <input type="number" name="breakMinutes" min="0" />
+              </label>
+              <label class="field">
+                狀態
+                <select name="status">
+                  <option value="Submitted">Submitted</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Request Edit">Request Edit</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </label>
+              <label class="field">
+                調整原因
+                <input name="reason" type="text" placeholder="補登、修正錯誤" />
+              </label>
+              <label class="field">
+                備註
+                <textarea name="notes"></textarea>
+              </label>
+              <div class="actions" style="align-items:flex-end;">
+                <button type="submit">套用調整</button>
+              </div>
+            </form>
+          `
+          : `<p class="notice">尚無工時資料。</p>`
+      }
+    </section>
   `);
 
   document.querySelector("#event-form").addEventListener("submit", async (event) => {
@@ -586,6 +707,94 @@ function renderAdmin() {
     await persist();
     router();
   });
+
+  document.querySelectorAll("button[data-user]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const targetId = button.dataset.user;
+      const select = document.querySelector(`select[data-role="${targetId}"]`);
+      const nextRole = select?.value;
+      const targetUser = data.users.find((userItem) => userItem.id === targetId);
+      if (!targetUser || !nextRole || targetUser.role === nextRole) return;
+      const before = { ...targetUser };
+      targetUser.role = nextRole;
+      data.auditLogs.push({
+        id: uuid(),
+        entityType: "User",
+        entityId: targetUser.id,
+        action: "Update Role",
+        actorId: user.id,
+        actorName: user.name,
+        timestamp: new Date().toISOString(),
+        before,
+        after: { ...targetUser },
+      });
+      await persist();
+      router();
+    });
+  });
+
+  if (data.timeEntries.length) {
+    const entryMap = new Map(data.timeEntries.map((entry) => [entry.id, entry]));
+    const entrySelect = document.querySelector("#adjust-entry");
+    const adjustForm = document.querySelector("#adjust-form");
+
+    const fillAdjustForm = (entry) => {
+      if (!entry) return;
+      adjustForm.start.value = formatDateTimeInput(entry.start);
+      adjustForm.end.value = formatDateTimeInput(entry.end);
+      adjustForm.breakMinutes.value = entry.breakMinutes ?? 0;
+      adjustForm.status.value = entry.status;
+      adjustForm.notes.value = entry.notes || "";
+    };
+
+    fillAdjustForm(entryMap.get(entrySelect.value));
+
+    entrySelect.addEventListener("change", () => {
+      fillAdjustForm(entryMap.get(entrySelect.value));
+    });
+
+    adjustForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = Object.fromEntries(new FormData(adjustForm));
+      const entry = entryMap.get(payload.entryId);
+      if (!entry) return;
+      const before = { ...entry };
+      entry.start = payload.start;
+      entry.end = payload.end;
+      entry.breakMinutes = Number(payload.breakMinutes || 0);
+      entry.notes = payload.notes;
+      entry.status = payload.status;
+      if (entry.status === "Approved") {
+        entry.approvedBy = user.id;
+        entry.approvedAt = new Date().toISOString();
+      } else {
+        entry.approvedBy = null;
+        entry.approvedAt = null;
+      }
+      data.adjustments.push({
+        id: uuid(),
+        timeEntryId: entry.id,
+        adjustedBy: user.id,
+        adjustedAt: new Date().toISOString(),
+        reason: payload.reason,
+        before,
+        after: { ...entry },
+      });
+      data.auditLogs.push({
+        id: uuid(),
+        entityType: "TimeEntry",
+        entityId: entry.id,
+        action: "Admin Adjust",
+        actorId: user.id,
+        actorName: user.name,
+        timestamp: new Date().toISOString(),
+        before,
+        after: { ...entry },
+      });
+      await persist();
+      router();
+    });
+  }
 }
 
 function renderPayroll() {
