@@ -34,7 +34,7 @@ const getEntryEventInfo = (entry, events) => {
   const eventItem = events.find((eventRecord) => eventRecord.id === entry.eventId);
   return {
     name: eventItem?.code || "-",
-    refNo: "-",
+    refNo: eventItem?.refNo || "-",
   };
 };
 
@@ -441,6 +441,10 @@ function renderAdmin() {
           <input name="code" required />
         </label>
         <label class="field">
+          Ref No / 參考編號
+          <input name="refNo" required />
+        </label>
+        <label class="field">
           日期 / Date
           <input type="date" name="date" required />
         </label>
@@ -480,6 +484,7 @@ function renderAdmin() {
         <thead>
           <tr>
             <th>Event Code / 活動代碼</th>
+            <th>Ref No / 參考編號</th>
             <th>日期 / Date</th>
             <th>地點 / Location</th>
             <th>Lead Chef / 主廚</th>
@@ -493,6 +498,7 @@ function renderAdmin() {
                     (eventItem) => `
                 <tr>
                   <td>${eventItem.code}</td>
+                  <td>${eventItem.refNo || "-"}</td>
                   <td>${formatDate(eventItem.date)}</td>
                   <td>${eventItem.location}</td>
                   <td>${
@@ -503,7 +509,7 @@ function renderAdmin() {
               `
                   )
                   .join("")
-              : `<tr><td colspan="4">尚無活動 / No events yet</td></tr>`
+              : `<tr><td colspan="5">尚無活動 / No events yet</td></tr>`
           }
         </tbody>
       </table>
@@ -621,6 +627,7 @@ function renderAdmin() {
     const eventItem = {
       id: uuid(),
       code: payload.code,
+      refNo: payload.refNo,
       date: payload.date,
       location: payload.location,
       startEstimate: payload.startEstimate,
