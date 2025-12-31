@@ -24,6 +24,20 @@ const formatDateTimeInput = (value) => {
   return localDate.toISOString().slice(0, 16);
 };
 
+const getEntryEventInfo = (entry, events) => {
+  if (entry.eventName || entry.refNo) {
+    return {
+      name: entry.eventName || "-",
+      refNo: entry.refNo || "-",
+    };
+  }
+  const eventItem = events.find((eventRecord) => eventRecord.id === entry.eventId);
+  return {
+    name: eventItem?.code || "-",
+    refNo: "-",
+  };
+};
+
 const diffHours = (start, end, breakMinutes = 0) => {
   if (!start || !end) return 0;
   const startDate = new Date(start);
@@ -79,8 +93,7 @@ const renderNav = () => {
     return;
   }
   const routes = [
-    { key: "#/events", label: "我的活動" },
-    { key: "#/event", label: "活動詳情" },
+    { key: "#/events", label: "填報工時" },
   ];
   if (user.role === "lead") {
     routes.push({ key: "#/approve", label: "核准" });
@@ -122,7 +135,6 @@ const updateUserBadge = () => {
 const routeMap = {
   "#/login": renderLogin,
   "#/events": renderEvents,
-  "#/event": renderEventDetail,
   "#/approve": renderApprove,
   "#/admin": renderAdmin,
   "#/payroll": renderPayroll,
@@ -175,143 +187,75 @@ function renderLogin() {
 function renderEvents() {
   const user = getUser();
   if (!user) return;
-  const events = data.events.filter((eventItem) => {
-    if (user.role === "admin") return true;
-    if (user.role === "lead") return eventItem.leadChefId === user.id;
-    return eventItem.crewIds?.includes(user.id);
-  });
-  render(`
-    <section class="card">
-      <h2>我的活動</h2>
-      ${
-        events.length
-          ? `<div class="grid">${events
-              .map(
-                (eventItem) => `
-              <div class="card" style="margin:0">
-                <h3>${eventItem.code}</h3>
-                <p>${eventItem.location}｜${formatDate(eventItem.date)}</p>
-                <p class="muted">Lead Chef: ${
-                  data.users.find((userItem) => userItem.id === eventItem.leadChefId)
-                    ?.name || "-"
-                }</p>
-                <div class="actions">
-                  <button data-id="${eventItem.id}" class="secondary open-event">查看</button>
-                </div>
-              </div>
-            `
-              )
-              .join("")}</div>`
-          : `<p class="notice">目前尚未指派活動。</p>`
-      }
-    </section>
-  `);
-  document.querySelectorAll(".open-event").forEach((button) => {
-    button.addEventListener("click", () => {
-      window.location.hash = `#/event?id=${button.dataset.id}`;
-    });
-  });
-}
-
-function renderEventDetail() {
-  const user = getUser();
-  const params = new URLSearchParams(window.location.hash.split("?")[1]);
-  const eventId = params.get("id");
-  const eventItem = data.events.find((entry) => entry.id === eventId);
-
-  if (!eventItem) {
-    render(`<section class="card"><p>找不到活動。</p></section>`);
-    return;
-  }
-
-  const myEntries = data.timeEntries.filter(
-    (entry) => entry.eventId === eventId && entry.userId === user.id
-  );
-  const latestEntry = [...myEntries].sort(
-    (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-  )[0];
-  const canSubmit =
-    !latestEntry || ["Request Edit", "Rejected"].includes(latestEntry.status);
-  const disabledAttr = canSubmit ? "" : "disabled";
+  const myEntries = data.timeEntries.filter((entry) => entry.userId === user.id);
   const entriesHtml = myEntries
-    .map(
-      (entry) => `
+    .map((entry) => {
+      const eventInfo = getEntryEventInfo(entry, data.events);
+      return `
         <tr>
+          <td>${eventInfo.name}</td>
+          <td>${eventInfo.refNo}</td>
           <td>${formatDateTime(entry.start)}</td>
           <td>${formatDateTime(entry.end)}</td>
           <td>${entry.breakMinutes}</td>
           <td>${diffHours(entry.start, entry.end, entry.breakMinutes).toFixed(2)}</td>
           <td>${entry.status}</td>
         </tr>
-      `
-    )
+      `;
+    })
     .join("");
-
   render(`
     <section class="card">
-      <h2>${eventItem.code}｜${eventItem.location}</h2>
-      <div class="grid two">
-        <div>
-          <p>日期：${formatDate(eventItem.date)}</p>
-          <p>預估時間：${eventItem.startEstimate || "-"} ~ ${
-    eventItem.endEstimate || "-"
-  }</p>
-          <p>Lead Chef：${
-            data.users.find((userItem) => userItem.id === eventItem.leadChefId)
-              ?.name || "-"
-          }</p>
-        </div>
-        <div>
-          <p>我的工時記錄 (${myEntries.length})</p>
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Start</th>
-                <th>End</th>
-                <th>Break</th>
-                <th>工時</th>
-                <th>狀態</th>
-              </tr>
-            </thead>
-            <tbody>${entriesHtml || `<tr><td colspan="5">尚未填報</td></tr>`}</tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-    <section class="card">
-      <h2>填報 Timesheet</h2>
-      ${
-        canSubmit
-          ? ""
-          : `<p class="notice">目前狀態為「${latestEntry.status}」，需由 Lead Chef 或 Admin 要求更正後才能再次提交。</p>`
-      }
+      <h2>填報工時</h2>
+      <p class="notice">Ref No 必填，未填寫將無法提交工時。</p>
       <form id="timesheet-form" class="grid three">
         <label class="field">
+          活動名稱
+          <input type="text" name="eventName" placeholder="今日活動" required />
+        </label>
+        <label class="field">
+          Ref No
+          <input type="text" name="refNo" placeholder="REF-0001" required />
+        </label>
+        <label class="field">
           到場時間
-          <input type="datetime-local" name="start" required ${disabledAttr} />
+          <input type="datetime-local" name="start" required />
         </label>
         <label class="field">
           離場時間
-          <input type="datetime-local" name="end" required ${disabledAttr} />
+          <input type="datetime-local" name="end" required />
         </label>
         <label class="field">
           Break 分鐘
-          <input type="number" name="breakMinutes" value="0" min="0" ${disabledAttr} />
+          <input type="number" name="breakMinutes" value="0" min="0" />
         </label>
         <label class="field">
           備註
-          <textarea name="notes" placeholder="延時、等候、額外搬運" ${disabledAttr}></textarea>
+          <textarea name="notes" placeholder="延時、等候、額外搬運"></textarea>
         </label>
         <div class="actions" style="align-items: flex-end;">
-          <button type="submit" ${disabledAttr}>提交</button>
+          <button type="submit">提交</button>
         </div>
       </form>
     </section>
+    <section class="card">
+      <h2>我的工時記錄</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>活動</th>
+            <th>Ref No</th>
+            <th>Start</th>
+            <th>End</th>
+            <th>Break</th>
+            <th>工時</th>
+            <th>狀態</th>
+          </tr>
+        </thead>
+        <tbody>${entriesHtml || `<tr><td colspan="7">尚未填報</td></tr>`}</tbody>
+      </table>
+    </section>
   `);
-
-  if (!canSubmit) {
-    return;
-  }
 
   document.querySelector("#timesheet-form").addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -319,7 +263,8 @@ function renderEventDetail() {
     const payload = Object.fromEntries(new FormData(form));
     const entry = {
       id: uuid(),
-      eventId,
+      eventName: payload.eventName,
+      refNo: payload.refNo,
       userId: user.id,
       start: payload.start,
       end: payload.end,
@@ -351,40 +296,34 @@ function renderApprove() {
     render(`<section class="card">沒有權限。</section>`);
     return;
   }
-  const leadEvents = data.events.filter((eventItem) => eventItem.leadChefId === user.id);
-  const entryRows = leadEvents
-    .map((eventItem) => {
-      const entries = data.timeEntries.filter((entry) => entry.eventId === eventItem.id);
-      if (!entries.length) {
-        return "";
-      }
-      return entries
-        .map((entry) => {
-          const member = data.users.find((userItem) => userItem.id === entry.userId);
-          const hours = diffHours(entry.start, entry.end, entry.breakMinutes);
-          const anomalies = [];
-          if (!entry.breakMinutes) anomalies.push("未填 break");
-          if (!entry.start || !entry.end) anomalies.push("時間缺漏");
-          if (hours > 12) anomalies.push("工時過長");
-          return `
-            <tr>
-              <td><input type="checkbox" data-entry="${entry.id}" /></td>
-              <td>${eventItem.code}</td>
-              <td>${member?.name || "-"}</td>
-              <td>${formatDateTime(entry.start)}</td>
-              <td>${formatDateTime(entry.end)}</td>
-              <td>${entry.breakMinutes}</td>
-              <td>${hours.toFixed(2)}</td>
-              <td>${entry.status}</td>
-              <td>${
-                anomalies.length
-                  ? `<span class="badge warning">${anomalies.join("、")}</span>`
-                  : `<span class="badge success">正常</span>`
-              }</td>
-            </tr>
-          `;
-        })
-        .join("");
+  const entryRows = data.timeEntries
+    .map((entry) => {
+      const member = data.users.find((userItem) => userItem.id === entry.userId);
+      const hours = diffHours(entry.start, entry.end, entry.breakMinutes);
+      const anomalies = [];
+      if (!entry.refNo) anomalies.push("未填 Ref No");
+      if (!entry.breakMinutes) anomalies.push("未填 break");
+      if (!entry.start || !entry.end) anomalies.push("時間缺漏");
+      if (hours > 12) anomalies.push("工時過長");
+      const eventInfo = getEntryEventInfo(entry, data.events);
+      return `
+        <tr>
+          <td><input type="checkbox" data-entry="${entry.id}" /></td>
+          <td>${eventInfo.name}</td>
+          <td>${eventInfo.refNo}</td>
+          <td>${member?.name || "-"}</td>
+          <td>${formatDateTime(entry.start)}</td>
+          <td>${formatDateTime(entry.end)}</td>
+          <td>${entry.breakMinutes}</td>
+          <td>${hours.toFixed(2)}</td>
+          <td>${entry.status}</td>
+          <td>${
+            anomalies.length
+              ? `<span class="badge warning">${anomalies.join("、")}</span>`
+              : `<span class="badge success">正常</span>`
+          }</td>
+        </tr>
+      `;
     })
     .join("");
 
@@ -401,7 +340,8 @@ function renderApprove() {
         <thead>
           <tr>
             <th></th>
-            <th>Event</th>
+            <th>活動</th>
+            <th>Ref No</th>
             <th>成員</th>
             <th>Start</th>
             <th>End</th>
@@ -411,7 +351,7 @@ function renderApprove() {
             <th>異常</th>
           </tr>
         </thead>
-        <tbody>${entryRows || `<tr><td colspan="9">尚無提交紀錄</td></tr>`}</tbody>
+        <tbody>${entryRows || `<tr><td colspan="10">尚無提交紀錄</td></tr>`}</tbody>
       </table>
     </section>
   `);
@@ -479,12 +419,6 @@ function renderAdmin() {
     render(`<section class="card">沒有權限。</section>`);
     return;
   }
-  const crewOptions = data.users
-    .filter((userItem) => userItem.role === "crew" || userItem.role === "lead")
-    .map((userItem) =>
-      `<option value="${userItem.id}">${userItem.name} (${roleLabels[userItem.role]})</option>`
-    )
-    .join("");
 
   render(`
     <section class="card">
@@ -523,10 +457,6 @@ function renderAdmin() {
               .join("")}
           </select>
         </label>
-        <label class="field">
-          指派 Crew
-          <select name="crewIds" multiple size="6">${crewOptions}</select>
-        </label>
         <div class="actions" style="align-items:flex-end;">
           <button type="submit">建立</button>
         </div>
@@ -541,7 +471,6 @@ function renderAdmin() {
             <th>日期</th>
             <th>地點</th>
             <th>Lead Chef</th>
-            <th>Crew 人數</th>
           </tr>
         </thead>
         <tbody>
@@ -558,12 +487,11 @@ function renderAdmin() {
                     data.users.find((userItem) => userItem.id === eventItem.leadChefId)
                       ?.name || "-"
                   }</td>
-                  <td>${eventItem.crewIds?.length || 0}</td>
                 </tr>
               `
                   )
                   .join("")
-              : `<tr><td colspan="5">尚無活動</td></tr>`
+              : `<tr><td colspan="4">尚無活動</td></tr>`
           }
         </tbody>
       </table>
@@ -677,9 +605,7 @@ function renderAdmin() {
   document.querySelector("#event-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = event.target;
-    const formData = new FormData(form);
-    const crewIds = formData.getAll("crewIds");
-    const payload = Object.fromEntries(formData.entries());
+    const payload = Object.fromEntries(new FormData(form));
     const eventItem = {
       id: uuid(),
       code: payload.code,
@@ -688,7 +614,7 @@ function renderAdmin() {
       startEstimate: payload.startEstimate,
       endEstimate: payload.endEstimate,
       leadChefId: payload.leadChefId,
-      crewIds,
+      crewIds: [],
       createdBy: user.id,
       createdAt: new Date().toISOString(),
     };
@@ -821,21 +747,30 @@ function renderPayroll() {
       };
     });
 
-  const summaryByEvent = data.events.map((eventItem) => {
-    const entries = data.timeEntries.filter(
-      (entry) => entry.eventId === eventItem.id && entry.status === "Approved"
-    );
-    const totalHours = entries.reduce(
-      (total, entry) => total + diffHours(entry.start, entry.end, entry.breakMinutes),
-      0
-    );
-    return {
-      code: eventItem.code,
-      date: formatDate(eventItem.date),
-      totalHours: totalHours.toFixed(2),
-      totalCrew: entries.length,
-    };
-  });
+  const summaryByEvent = Array.from(
+    data.timeEntries
+      .filter((entry) => entry.status === "Approved")
+      .reduce((map, entry) => {
+        const eventInfo = getEntryEventInfo(entry, data.events);
+        const key = `${eventInfo.refNo}-${eventInfo.name}`;
+        if (!map.has(key)) {
+          map.set(key, {
+            name: eventInfo.name,
+            refNo: eventInfo.refNo,
+            totalHours: 0,
+            totalCrew: 0,
+          });
+        }
+        const record = map.get(key);
+        record.totalHours += diffHours(entry.start, entry.end, entry.breakMinutes);
+        record.totalCrew += 1;
+        return map;
+      }, new Map())
+      .values()
+  ).map((record) => ({
+    ...record,
+    totalHours: record.totalHours.toFixed(2),
+  }));
 
   render(`
     <section class="card">
@@ -871,7 +806,7 @@ function renderPayroll() {
           <h3>依活動彙總</h3>
           <table class="table">
             <thead>
-              <tr><th>Event</th><th>日期</th><th>工時</th><th>人數</th></tr>
+              <tr><th>活動</th><th>Ref No</th><th>工時</th><th>人數</th></tr>
             </thead>
             <tbody>
               ${
@@ -879,7 +814,7 @@ function renderPayroll() {
                   ? summaryByEvent
                       .map(
                         (row) =>
-                          `<tr><td>${row.code}</td><td>${row.date}</td><td>${
+                          `<tr><td>${row.name}</td><td>${row.refNo}</td><td>${
                             row.totalHours
                           }</td><td>${row.totalCrew}</td></tr>`
                       )
@@ -957,8 +892,8 @@ function renderPayroll() {
 
   document.querySelector("#export-event").addEventListener("click", () => {
     const rows = [
-      ["Event Code", "Date", "Total Hours", "Total Crew"],
-      ...summaryByEvent.map((row) => [row.code, row.date, row.totalHours, row.totalCrew]),
+      ["Event", "Ref No", "Total Hours", "Total Crew"],
+      ...summaryByEvent.map((row) => [row.name, row.refNo, row.totalHours, row.totalCrew]),
     ];
     downloadCsv(rows, "payroll_by_event.csv");
   });
