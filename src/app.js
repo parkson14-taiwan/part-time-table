@@ -180,7 +180,9 @@ function renderLogin() {
     const form = event.target;
     const payload = Object.fromEntries(new FormData(form));
     await ensureData();
-    const existing = data.users.find((entry) => entry.id === payload.email);
+    const existing = data.users.find(
+      (entry) => entry.id === payload.email || entry.email === payload.email
+    );
     if (!existing) {
       const user = {
         id: payload.email,
