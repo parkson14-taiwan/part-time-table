@@ -29,12 +29,14 @@ const getEntryEventInfo = (entry, events) => {
     return {
       name: entry.eventName || "-",
       refNo: entry.refNo || "-",
+      date: formatDate(entry.start) || "-",
     };
   }
   const eventItem = events.find((eventRecord) => eventRecord.id === entry.eventId);
   return {
     name: eventItem?.code || "-",
     refNo: eventItem?.refNo || "-",
+    date: formatDate(eventItem?.date) || "-",
   };
 };
 
@@ -785,11 +787,12 @@ function renderPayroll() {
     filteredEntries
       .reduce((map, entry) => {
         const eventInfo = getEntryEventInfo(entry, data.events);
-        const key = `${eventInfo.refNo}-${eventInfo.name}`;
+        const key = `${eventInfo.refNo}-${eventInfo.name}-${eventInfo.date}`;
         if (!map.has(key)) {
           map.set(key, {
             name: eventInfo.name,
             refNo: eventInfo.refNo,
+            date: eventInfo.date,
             totalHours: 0,
             totalCrew: 0,
           });
@@ -853,7 +856,7 @@ function renderPayroll() {
           <h3>依活動彙總 / Summary by event</h3>
           <table class="table">
             <thead>
-              <tr><th>活動 / Event</th><th>Ref No / 參考編號</th><th>工時 / Hours</th><th>人數 / Crew</th></tr>
+              <tr><th>活動 / Event</th><th>Ref No / 參考編號</th><th>日期 / Date</th><th>工時 / Hours</th><th>人數 / Crew</th></tr>
             </thead>
             <tbody>
               ${
@@ -861,12 +864,12 @@ function renderPayroll() {
                   ? summaryByEvent
                       .map(
                         (row) =>
-                          `<tr><td>${row.name}</td><td>${row.refNo}</td><td>${
+                          `<tr><td>${row.name}</td><td>${row.refNo}</td><td>${row.date}</td><td>${
                             row.totalHours
                           }</td><td>${row.totalCrew}</td></tr>`
                       )
                       .join("")
-                  : `<tr><td colspan="4">尚無核准工時 / No approved entries</td></tr>`
+                  : `<tr><td colspan="5">尚無核准工時 / No approved entries</td></tr>`
               }
             </tbody>
           </table>
@@ -939,8 +942,14 @@ function renderPayroll() {
 
   document.querySelector("#export-event").addEventListener("click", () => {
     const rows = [
-      ["Event / 活動", "Ref No / 參考編號", "Total Hours / 總工時", "Total Crew / 人數"],
-      ...summaryByEvent.map((row) => [row.name, row.refNo, row.totalHours, row.totalCrew]),
+      ["Event / 活動", "Ref No / 參考編號", "Date / 日期", "Total Hours / 總工時", "Total Crew / 人數"],
+      ...summaryByEvent.map((row) => [
+        row.name,
+        row.refNo,
+        row.date,
+        row.totalHours,
+        row.totalCrew,
+      ]),
     ];
     downloadCsv(rows, "payroll_by_event.csv");
   });
