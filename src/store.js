@@ -6,19 +6,19 @@ const initialData = {
   users: [
     {
       id: "u-admin",
-      name: "Admin Demo",
+      name: "Admin Demo / 管理員示範",
       role: "admin",
       email: "admin@example.com",
     },
     {
       id: "u-lead",
-      name: "Lead Chef",
+      name: "Lead Chef / 主廚",
       role: "lead",
       email: "lead@example.com",
     },
     {
       id: "u-crew",
-      name: "Crew Member",
+      name: "Crew Member / 夥伴",
       role: "crew",
       email: "crew@example.com",
     },
