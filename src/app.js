@@ -562,15 +562,13 @@ function renderAdmin() {
                 <select name="entryId" id="adjust-entry">
                   ${data.timeEntries
                     .map((entry) => {
+                      const eventInfo = getEntryEventInfo(entry, data.events);
                       const entryUser = data.users.find(
                         (userItem) => userItem.id === entry.userId
                       );
-                      const entryEvent = data.events.find(
-                        (eventItem) => eventItem.id === entry.eventId
-                      );
-                      return `<option value="${entry.id}">${entryEvent?.code || "-"}｜${
-                        entryUser?.name || "-"
-                      }｜${formatDateTime(entry.start)}（${
+                      return `<option value="${entry.id}">${eventInfo.refNo}｜${
+                        eventInfo.name
+                      }｜${entryUser?.name || "-"}｜${formatDateTime(entry.start)}（${
                         statusLabels[entry.status] || entry.status
                       }）</option>`;
                     })
