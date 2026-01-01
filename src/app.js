@@ -834,9 +834,12 @@ function renderPayroll() {
           <button type="button" id="clear-payroll-filter" class="secondary">清除 / Clear</button>
         </div>
       </form>
-      <div class="actions">
-        <button id="export-user">依人員匯出 CSV / Export by user</button>
-        <button id="export-event" class="secondary">依活動匯出 CSV / Export by event</button>
+      <div class="actions" style="align-items:flex-end; gap:12px; flex-wrap:wrap;">
+        <label class="field" style="margin:0;">
+          時薪 / Per hr rate
+          <input type="number" id="payroll-rate" min="0" step="0.01" placeholder="0.00" />
+        </label>
+        <button id="export-payroll">匯出 CSV / Export CSV</button>
       </div>
       <div class="grid two" style="margin-top:16px;">
         <div>
@@ -941,34 +944,33 @@ function renderPayroll() {
     link.click();
   };
 
-  document.querySelector("#export-user").addEventListener("click", () => {
-    const rows = [
-      ["Name / 姓名", "Role / 角色", "Total Hours / 總工時"],
-      ...summaryByUser.map((row) => [row.name, row.role, row.totalHours]),
-    ];
-    downloadCsv(rows, "payroll_by_user.csv");
-  });
-
-  document.querySelector("#export-event").addEventListener("click", () => {
+  document.querySelector("#export-payroll").addEventListener("click", () => {
+    const perHourRate = document.querySelector("#payroll-rate").value;
     const rows = [
       [
         "Event / 活動",
         "Ref No / 參考編號",
         "Date / 日期",
-        "Total Hours / 總工時",
-        "Total Crew / 人數",
+        "Crew / 人員",
+        "Hours / 工時",
         "Approved By / 核准人",
+        "Per Hr Rate / 時薪",
       ],
-      ...summaryByEvent.map((row) => [
-        row.name,
-        row.refNo,
-        row.date,
-        row.totalHours,
-        row.totalCrew,
-        row.approvedBy,
-      ]),
+      ...filteredEntries.map((entry) => {
+        const eventInfo = getEntryEventInfo(entry, data.events);
+        const approverName = entry.approvedBy ? userNameById.get(entry.approvedBy) : null;
+        return [
+          eventInfo.name,
+          eventInfo.refNo,
+          eventInfo.date,
+          userNameById.get(entry.userId) || "—",
+          diffHours(entry.start, entry.end, entry.breakMinutes).toFixed(2),
+          approverName || "—",
+          perHourRate,
+        ];
+      }),
     ];
-    downloadCsv(rows, "payroll_by_event.csv");
+    downloadCsv(rows, "payroll_export.csv");
   });
 
   document.querySelector("#payroll-filter").addEventListener("submit", (event) => {
