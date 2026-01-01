@@ -771,51 +771,18 @@ function renderPayroll() {
   });
   const userNameById = new Map(data.users.map((userItem) => [userItem.id, userItem.name]));
 
-  const summaryByUser = data.users
-    .filter((userItem) => userItem.role !== "admin")
-    .map((userItem) => {
-      const entries = filteredEntries.filter((entry) => entry.userId === userItem.id);
-      const totalHours = entries.reduce(
-        (total, entry) => total + diffHours(entry.start, entry.end, entry.breakMinutes),
-        0
-      );
-      return {
-        name: userItem.name,
-        role: roleLabels[userItem.role],
-        totalHours: totalHours.toFixed(2),
-      };
-    });
-
-  const summaryByEvent = Array.from(
-    filteredEntries
-      .reduce((map, entry) => {
-        const eventInfo = getEntryEventInfo(entry, data.events);
-        const key = `${eventInfo.refNo}-${eventInfo.name}-${eventInfo.date}`;
-        if (!map.has(key)) {
-          map.set(key, {
-            name: eventInfo.name,
-            refNo: eventInfo.refNo,
-            date: eventInfo.date,
-            totalHours: 0,
-            totalCrew: 0,
-            approvedBy: new Set(),
-          });
-        }
-        const record = map.get(key);
-        record.totalHours += diffHours(entry.start, entry.end, entry.breakMinutes);
-        record.totalCrew += 1;
-        const approverName = entry.approvedBy ? userNameById.get(entry.approvedBy) : null;
-        if (approverName) {
-          record.approvedBy.add(approverName);
-        }
-        return map;
-      }, new Map())
-      .values()
-  ).map((record) => ({
-    ...record,
-    totalHours: record.totalHours.toFixed(2),
-    approvedBy: record.approvedBy.size ? Array.from(record.approvedBy).join("、") : "—",
-  }));
+  const payrollRows = filteredEntries.map((entry) => {
+    const eventInfo = getEntryEventInfo(entry, data.events);
+    const approverName = entry.approvedBy ? userNameById.get(entry.approvedBy) : null;
+    return {
+      crew: userNameById.get(entry.userId) || "—",
+      event: eventInfo.name,
+      refNo: eventInfo.refNo,
+      date: eventInfo.date,
+      hours: diffHours(entry.start, entry.end, entry.breakMinutes).toFixed(2),
+      approvedBy: approverName || "—",
+    };
+  });
 
   render(`
     <section class="card">
@@ -841,51 +808,25 @@ function renderPayroll() {
         </label>
         <button id="export-payroll">匯出 CSV / Export CSV</button>
       </div>
-      <div class="grid two" style="margin-top:16px;">
-        <div>
-          <h3>依人員彙總 / Summary by user</h3>
-          <table class="table">
-            <thead>
-              <tr><th>人員 / Name</th><th>角色 / Role</th><th>總工時 / Total hours</th></tr>
-            </thead>
-            <tbody>
-              ${
-                summaryByUser.length
-                  ? summaryByUser
-                      .map(
-                        (row) =>
-                          `<tr><td>${row.name}</td><td>${row.role}</td><td>${
-                            row.totalHours
-                          }</td></tr>`
-                      )
-                      .join("")
-                  : `<tr><td colspan="3">尚無核准工時 / No approved entries</td></tr>`
-              }
-            </tbody>
-          </table>
-        </div>
-        <div>
-          <h3>依活動彙總 / Summary by event</h3>
-          <table class="table">
-            <thead>
-              <tr><th>活動 / Event</th><th>Ref No / 參考編號</th><th>日期 / Date</th><th>工時 / Hours</th><th>人數 / Crew</th><th>核准人 / Approved by</th></tr>
-            </thead>
-            <tbody>
-              ${
-                summaryByEvent.length
-                  ? summaryByEvent
-                      .map(
-                        (row) =>
-                          `<tr><td>${row.name}</td><td>${row.refNo}</td><td>${row.date}</td><td>${
-                            row.totalHours
-                          }</td><td>${row.totalCrew}</td><td>${row.approvedBy}</td></tr>`
-                      )
-                      .join("")
-                  : `<tr><td colspan="6">尚無核准工時 / No approved entries</td></tr>`
-              }
-            </tbody>
-          </table>
-        </div>
+      <div style="margin-top:16px;">
+        <h3>核准工時明細 / Approved hours detail</h3>
+        <table class="table">
+          <thead>
+            <tr><th>Crew / 夥伴</th><th>活動 / Event</th><th>Ref No / 參考編號</th><th>日期 / Date</th><th>工時 / Hours</th><th>核准人 / Approved by</th></tr>
+          </thead>
+          <tbody>
+            ${
+              payrollRows.length
+                ? payrollRows
+                    .map(
+                      (row) =>
+                        `<tr><td>${row.crew}</td><td>${row.event}</td><td>${row.refNo}</td><td>${row.date}</td><td>${row.hours}</td><td>${row.approvedBy}</td></tr>`
+                    )
+                    .join("")
+                : `<tr><td colspan="6">尚無核准工時 / No approved entries</td></tr>`
+            }
+          </tbody>
+        </table>
       </div>
     </section>
     <section class="card">
@@ -948,10 +889,10 @@ function renderPayroll() {
     const perHourRate = document.querySelector("#payroll-rate").value;
     const rows = [
       [
+        "Crew / 夥伴",
         "Event / 活動",
         "Ref No / 參考編號",
         "Date / 日期",
-        "Crew / 人員",
         "Hours / 工時",
         "Approved By / 核准人",
         "Per Hr Rate / 時薪",
@@ -960,10 +901,10 @@ function renderPayroll() {
         const eventInfo = getEntryEventInfo(entry, data.events);
         const approverName = entry.approvedBy ? userNameById.get(entry.approvedBy) : null;
         return [
+          userNameById.get(entry.userId) || "—",
           eventInfo.name,
           eventInfo.refNo,
           eventInfo.date,
-          userNameById.get(entry.userId) || "—",
           diffHours(entry.start, entry.end, entry.breakMinutes).toFixed(2),
           approverName || "—",
           perHourRate,
