@@ -59,6 +59,10 @@ const render = (html) => {
 
 let store;
 let data;
+const approveFilters = {
+  startDate: "",
+  endDate: "",
+};
 
 const ensureData = async () => {
   if (!store) {
@@ -312,7 +316,31 @@ function renderApprove() {
     render(`<section class="card">沒有權限。 / Access denied.</section>`);
     return;
   }
-  const entryRows = data.timeEntries
+
+  const resolveEntryDate = (entry) => {
+    if (entry.start) return new Date(entry.start);
+    if (entry.eventId) {
+      const eventItem = data.events.find((eventRecord) => eventRecord.id === entry.eventId);
+      if (eventItem?.date) return new Date(eventItem.date);
+    }
+    return null;
+  };
+
+  const toDateStart = (value) => (value ? new Date(`${value}T00:00:00`) : null);
+  const toDateEnd = (value) => (value ? new Date(`${value}T23:59:59.999`) : null);
+  const filterStart = toDateStart(approveFilters.startDate);
+  const filterEnd = toDateEnd(approveFilters.endDate);
+
+  const filteredEntries = data.timeEntries.filter((entry) => {
+    if (!filterStart && !filterEnd) return true;
+    const entryDate = resolveEntryDate(entry);
+    if (!entryDate) return false;
+    if (filterStart && entryDate < filterStart) return false;
+    if (filterEnd && entryDate > filterEnd) return false;
+    return true;
+  });
+
+  const entryRows = filteredEntries
     .map((entry) => {
       const member = data.users.find((userItem) => userItem.id === entry.userId);
       const hours = diffHours(entry.start, entry.end, entry.breakMinutes);
@@ -346,6 +374,19 @@ function renderApprove() {
   render(`
     <section class="card">
       <h2>Lead Chef 核准 / Lead approvals</h2>
+      <div class="grid three" style="margin-bottom: 12px;">
+        <label class="field">
+          日期起 / Start date
+          <input type="date" id="approve-filter-start" value="${approveFilters.startDate}" />
+        </label>
+        <label class="field">
+          日期迄 / End date
+          <input type="date" id="approve-filter-end" value="${approveFilters.endDate}" />
+        </label>
+        <div class="actions" style="align-items: flex-end;">
+          <button id="approve-filter-clear" class="secondary">清除篩選 / Clear</button>
+        </div>
+      </div>
       <div class="actions">
         <button id="apply-break" class="secondary">批次套用 Break 30 分鐘 / Apply 30-min break</button>
         <button id="approve-selected">批次核准 / Approve selected</button>
@@ -371,6 +412,24 @@ function renderApprove() {
       </table>
     </section>
   `);
+
+  const startInput = document.querySelector("#approve-filter-start");
+  const endInput = document.querySelector("#approve-filter-end");
+  const clearButton = document.querySelector("#approve-filter-clear");
+
+  const applyFilters = () => {
+    approveFilters.startDate = startInput.value;
+    approveFilters.endDate = endInput.value;
+    renderApprove();
+  };
+
+  startInput.addEventListener("change", applyFilters);
+  endInput.addEventListener("change", applyFilters);
+  clearButton.addEventListener("click", () => {
+    approveFilters.startDate = "";
+    approveFilters.endDate = "";
+    renderApprove();
+  });
 
   const selectedEntries = () =>
     Array.from(document.querySelectorAll("input[type=checkbox]:checked")).map(
