@@ -17,6 +17,12 @@ const initialData = {
       email: "lead@example.com",
     },
     {
+      id: "u-chef",
+      name: "Chef / 廚師",
+      role: "chef",
+      email: "chef@example.com",
+    },
+    {
       id: "u-crew",
       name: "Crew Member / 夥伴",
       role: "crew",
