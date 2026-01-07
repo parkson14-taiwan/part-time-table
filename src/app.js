@@ -83,6 +83,7 @@ const getUser = () => getSession();
 const roleLabels = {
   admin: "Admin/Payroll / 管理者",
   lead: "Lead Chef / 主廚",
+  chef: "Chef / 廚師",
   crew: "Crew / 夥伴",
 };
 
@@ -602,6 +603,9 @@ function renderAdmin() {
                       <option value="crew" ${
                         userItem.role === "crew" ? "selected" : ""
                       }>Crew / 夥伴</option>
+                      <option value="chef" ${
+                        userItem.role === "chef" ? "selected" : ""
+                      }>Chef / 廚師</option>
                       <option value="lead" ${
                         userItem.role === "lead" ? "selected" : ""
                       }>Lead Chef / 主廚</option>
