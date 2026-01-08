@@ -357,6 +357,7 @@ function renderApprove() {
           <td>${eventInfo.name}</td>
           <td>${eventInfo.refNo}</td>
           <td>${member?.name || "-"}</td>
+          <td>${member?.role ? roleLabels[member.role] || member.role : "-"}</td>
           <td>${formatDateTime(entry.start)}</td>
           <td>${formatDateTime(entry.end)}</td>
           <td>${entry.breakMinutes}</td>
@@ -401,6 +402,7 @@ function renderApprove() {
             <th>活動 / Event</th>
             <th>Ref No / 參考編號</th>
             <th>成員 / Member</th>
+            <th>角色 / Role</th>
             <th>Start / 開始</th>
             <th>End / 結束</th>
             <th>Break / 休息</th>
@@ -409,7 +411,7 @@ function renderApprove() {
             <th>異常 / Alerts</th>
           </tr>
         </thead>
-        <tbody>${entryRows || `<tr><td colspan="10">尚無提交紀錄 / No submissions yet</td></tr>`}</tbody>
+        <tbody>${entryRows || `<tr><td colspan="11">尚無提交紀錄 / No submissions yet</td></tr>`}</tbody>
       </table>
     </section>
   `);
